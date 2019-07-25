@@ -1,0 +1,3 @@
+以下两个文件夹为对应STM32标准库中的对应文件夹，如要升级，直接替换文件夹即可
+1.CMSIS
+2.STM32F10x_StdPeriph_Driver
