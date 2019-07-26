@@ -1,7 +1,18 @@
+/*********************************************************************************
+ * 文件名  ：systemUI.c
+ * 描述    ：实现对LCD屏幕上的界面的绘制和对数值的更新
+ * 作者    ：xsj321 
+**********************************************************************************/
 #include "systemUI.h"
 #include "lcd.h"
 #include "string.h"
 #include "math.h"
+
+/**
+
+登记需要用到的文字包括标题
+
+**/
 const uint8_t Header_1[]= "Temperature  control";
 const uint8_t BlankLine[]= "                    ";
 const uint8_t Him[] = "Humidity:";

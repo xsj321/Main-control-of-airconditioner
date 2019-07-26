@@ -1,10 +1,3 @@
-/******************** (C) COPYRIGHT 2013 www.armjishu.com  ********************
- * 文件名  ：main.c
- * 描述    ：实现STM32F107VC神舟IV号开发板的TFT彩屏显示中文英文字符实验
- * 实验平台：STM32神舟开发板
- * 标准库  ：STM32F10x_StdPeriph_Driver V3.5.0
- * 作者    ：www.armjishu.com 
-*******************************************************************************/
 #include "lcd.h"
 #include "systemUI.h"
 #include "user_config.h"
@@ -17,18 +10,37 @@
 #include <stdio.h>
 #include <string.h>
 #include "stm32f10x_it.h"
-/**-------------------------------------------------------
-  * @函数名 main
-  * @功能   主函数
-  * @参数   无
-  * @返回值 无
-***------------------------------------------------------*/
-int i = 15;
-int last_i;
+
+#define MAX_Temp 30//设定最高温度
+#define MIN_Temp 15//设定最低温度
+
+#define MAX_EN_Temp 35//设定环境最高报警温度
+
+int i = 15;//默认开机设定温度同时也是保存设定温度的变量
+int last_i;//上一次的设定温度
+
+/*
+
+变量：POR
+功能：标记对控制温度的加减
+值	|		1		|		2		|		3		|
+————|———————|———————|———————|
+操作|	升温	|	降温	|	未操作|
+
+*/
 int POR = 3;
+
 u8 USART2_RX_BUF[250]; 
 u8 USART2_RX_CNT=0;
 u16 USART2_RX_STA=0;
+
+/***
+
+	函数名：void USART2_Receive_Data(u8 *buf)
+	参数：u8 *buf
+	功能：从USART获取数据
+	
+***/
 void USART2_Receive_Data(u8 *buf)
 {
     u8 rxlen=USART2_RX_CNT;
@@ -50,35 +62,43 @@ void USART2_Receive_Data(u8 *buf)
 
 int main(void)
 {
-		int NowTemp = 0;
-		int NowHum = 0;
-		u16 x,y,x1,y1;
+		int NowTemp = 0;//当前温度
+		int NowHum = 0;//当前湿度
+		u16 x,y,x1,y1;//触屏点击坐标
 		int count = 0;
     /* TFT-LCD初始化 */	
-		SZ_STM32_COMInit();
-		SZ_STM32_SysTickInit(1000000);
-    SZ_STM32_LCDInit();
-		Touch_Configuration();
-		BEE_init();
-	  LCD_Clear(LCD_COLOR_WHITE);
-		UI_Refresh(i,i,i);
-		last_i = i;
+		SZ_STM32_COMInit();//串口初始化
+		SZ_STM32_SysTickInit(1000000);//SysTickInit初始化
+    SZ_STM32_LCDInit();//LCD显示初始化
+		Touch_Configuration();//触摸屏初始化
+		BEE_init();//蜂鸣器初始化
+	  LCD_Clear(LCD_COLOR_WHITE);//设定背景颜色
+		UI_Refresh(i,i,i);//绘制数据界面，并数值刷新
+		last_i = i;//将当前的数值保存起来
+	
+		//循环控制了对温度控制的操作
 		while(1)	   
 		{
 			count++;
 			switch(POR)
 			{
 				case 1:
-					if(i<30)
+					if(i<MAX_Temp)
 					{
 						i++;
+						/*
+						此处添加对升温的硬件控制操作
+						*/
 						POR = 3;
 					}
 				break;
 				case 0:
-					if(i>15)
+					if(i>MIN_Temp)
 					{
 						i--;
+						/*
+						此处添加对降温的硬件控制操作
+						*/
 						POR = 3;
 					}
 				break;
@@ -86,28 +106,32 @@ int main(void)
 				break;
 			}
 			
+			//定时对画面的当前温度与当前湿度进行刷新
 			if(count==1000)
 			{
-				NowHum =dht11_hum_value(NowHum);
-				NowTemp =dht11_temp_value(NowTemp);
-				JSON_Sender(NowHum,NowTemp,i);
-				count=0;
+				NowHum =dht11_hum_value(NowHum);//读取当前的湿度
+				NowTemp =dht11_temp_value(NowTemp);//读取当前的温度
+				JSON_Sender(NowHum,NowTemp,i);//将数据格式化为JSON并从串口发送
+				count=0;//清零计数器
 			}
-			if(NowTemp>35)
+			
+			//判断温度是否超过警报的触发值
+			if(NowTemp>MAX_EN_Temp)
 			{
-					BEE_start();
+					BEE_start();//开始警报
 			}
 			else
 			{
-				 BEE_stop();
+				 BEE_stop();//停止警报
 			}
 			
-			if(!(GPIOC->IDR&0x20))	  /* PC5 判断触摸是否发生 */
+			if(!(GPIOC->IDR&0x20))//判断触摸是否发生
 			{
 				Touch_GetXY(&x,&y,0);
 				delay(TOUCH_DELAY);
 				Convert_Pos(x,y,&x1,&y1);
 				
+				//判断触摸区域
 				if(y<TOUCH_MINUS_BUTTON_LIFT&&y>TOUCH_MINUS_BUTTON_RIGHT&&i>15)
 				{
 					i--;
@@ -118,7 +142,8 @@ int main(void)
 				}
 				
 			}
-			UI_Value_Refresh(NowTemp,NowHum,i);
+			
+			UI_Value_Refresh(NowTemp,NowHum,i);//刷新数值
 			
 		}
 		
@@ -126,7 +151,13 @@ int main(void)
     while (1); 
 }
 	
+/***
 
+	函数名：USART2_IRQHandler(void)
+	参数：无
+	功能：串口2终端服务函数，接受传输过来的数据
+	
+***/
 
  void USART2_IRQHandler(void)
 {
@@ -157,7 +188,3 @@ int main(void)
 		 USART2_RX_CNT = 0;
 }
 
-
-
-
-/******************* (C) COPYRIGHT 2013 www.armjishu.com *****END OF FILE****/
